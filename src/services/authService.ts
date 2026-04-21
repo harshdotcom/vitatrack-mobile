@@ -10,6 +10,7 @@ import type {
   ForgotPasswordPayload,
   ResetPasswordPayload,
 } from '../types/auth.types';
+import type { AICreditUsage, UserUsage } from '../types/dashboard.types';
 
 export const authService = {
   /**
@@ -77,6 +78,16 @@ export const authService = {
    */
   googleLogin: async (token: string): Promise<LoginResponse> => {
     const { data } = await api.post<LoginResponse>(ENDPOINTS.GOOGLE_LOGIN, { token });
+    return data;
+  },
+
+  getUserUsage: async (): Promise<{ message: string; usage: UserUsage }> => {
+    const { data } = await api.get<{ message: string; usage: UserUsage }>(ENDPOINTS.USER_USAGE);
+    return data;
+  },
+
+  getAICredits: async (): Promise<{ message: string; usage: AICreditUsage }> => {
+    const { data } = await api.get<{ message: string; usage: AICreditUsage }>(ENDPOINTS.AI_CREDITS);
     return data;
   },
 };
