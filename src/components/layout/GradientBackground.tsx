@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'react-native-linear-gradient';
 import { useColorScheme } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -23,8 +23,8 @@ export function GradientBackground({ children }: GradientBackgroundProps) {
   const colors = isDark ? darkColors : lightColors;
 
   const gradientColors = isDark
-    ? (['#071516', '#0d2024', '#0b1617', '#113135'] as const)
-    : (['#e0efe5', '#bce4db', '#e0efe5', '#9ce0d3'] as const);
+    ? ['#071516', '#0d2024', '#0b1617', '#113135']
+    : ['#e0efe5', '#bce4db', '#e0efe5', '#9ce0d3'];
 
   // Orb 1 — top-left floating animation
   const orb1Y = useSharedValue(0);

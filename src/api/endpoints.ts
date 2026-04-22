@@ -4,7 +4,7 @@
  * Local : http://localhost:8081/api/v1
  */
 
-const BASE_URL = "http://10.0.2.2:8082/api/v1";
+const BASE_URL = 'http://10.0.2.2:8082/api/v1';
 
 export const ENDPOINTS = {
   BASE_URL,

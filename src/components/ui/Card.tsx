@@ -14,7 +14,7 @@ interface CardProps {
  * Glassmorphism card surface — matches the web app's glass-surface style.
  */
 export function Card({ children, style, glass = true, elevated = false }: CardProps) {
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
 
   const surfaceColor = glass
     ? colors.glassSurface

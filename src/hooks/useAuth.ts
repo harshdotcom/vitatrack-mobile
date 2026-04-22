@@ -1,52 +1,65 @@
 import { useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { CommonActions, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { authService } from '../services/authService';
-import type { VerifyOtpPayload, ResendOtpPayload, ForgotPasswordPayload } from '../types/auth.types';
+import type {
+  ForgotPasswordPayload,
+  ResendOtpPayload,
+  VerifyOtpPayload,
+} from '../types/auth.types';
+import type { RootStackParamList } from '../navigation/types';
 
-/**
- * Convenience hook wrapping the auth store + navigation actions.
- * Screens import this instead of the store directly for a clean API.
- */
 export function useAuth() {
-  const router = useRouter();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const store = useAuthStore();
+
+  const resetTo = useCallback(
+    (name: keyof RootStackParamList) => {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name }],
+        }),
+      );
+    },
+    [navigation],
+  );
 
   const loginAndNavigate = useCallback(
     async (email: string, password: string) => {
       await store.login({ email, password });
-      router.replace('/(tabs)');
+      resetTo('MainTabs');
     },
-    [store, router],
+    [store, resetTo],
   );
 
   const signupAndNavigate = useCallback(
     async (params: Parameters<typeof store.signup>[0], email: string) => {
       const { emailEnabled } = await store.signup(params);
       if (emailEnabled) {
-        router.push({ pathname: '/(auth)/verify-otp', params: { email } });
+        navigation.navigate('VerifyOtp', { email });
       } else {
-        // Email flow disabled — go straight to login
-        router.replace('/(auth)/login');
+        resetTo('Login');
       }
     },
-    [store, router],
+    [store, navigation, resetTo],
   );
 
   const googleLoginAndNavigate = useCallback(
     async (idToken: string) => {
       await store.googleLogin(idToken);
-      router.replace('/(tabs)');
+      resetTo('MainTabs');
     },
-    [store, router],
+    [store, resetTo],
   );
 
   const verifyOtp = useCallback(
     async (payload: VerifyOtpPayload) => {
       await authService.verifyOtp(payload);
-      router.replace('/(auth)/login');
+      resetTo('Login');
     },
-    [router],
+    [resetTo],
   );
 
   const resendOtp = useCallback(async (payload: ResendOtpPayload) => {
@@ -64,24 +77,22 @@ export function useAuth() {
   const resetPasswordAndNavigate = useCallback(
     async (payload: Parameters<typeof store.resetPassword>[0]) => {
       await store.resetPassword(payload);
-      router.replace('/(auth)/login');
+      resetTo('Login');
     },
-    [store, router],
+    [store, resetTo],
   );
 
   const logout = useCallback(async () => {
     await store.logout();
-    router.replace('/(auth)/login');
-  }, [store, router]);
+    resetTo('Login');
+  }, [store, resetTo]);
 
   return {
-    // State
     user: store.user,
     token: store.token,
     isAuthenticated: store.isAuthenticated,
     isLoading: store.isLoading,
     error: store.error,
-    // Actions
     loginAndNavigate,
     signupAndNavigate,
     googleLoginAndNavigate,

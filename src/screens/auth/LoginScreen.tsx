@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,6 +21,7 @@ import { Logo } from '../../components/ui/Logo';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
+import type { RootStackParamList } from '../../navigation/types';
 
 // ── Validation schema ─────────────────────────────────────────────────────────
 
@@ -33,7 +35,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
-  const router = useRouter();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { loginAndNavigate, isLoading } = useAuth();
   const { colors, fontFamily, fontSize } = useAppTheme();
   const [apiError, setApiError] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export default function LoginScreen() {
           transition={{ type: 'timing', duration: 400 }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -169,7 +171,7 @@ export default function LoginScreen() {
 
             {/* Forgot Password */}
             <TouchableOpacity
-              onPress={() => router.push('/(auth)/forgot-password')}
+              onPress={() => navigation.navigate('ForgotPassword')}
               style={styles.forgotBtn}
             >
               <Text
@@ -224,7 +226,7 @@ export default function LoginScreen() {
               >
                 Don't have an account?{' '}
               </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
                 <Text
                   style={[
                     { fontFamily: fontFamily.semiBold, fontSize: fontSize.sm, color: colors.primary },
