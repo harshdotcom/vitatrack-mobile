@@ -6,14 +6,16 @@ import {
   Dimensions,
   TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MotiView } from 'moti';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GradientBackground } from '../../components/layout/GradientBackground';
 import { Logo } from '../../components/ui/Logo';
 import { Button } from '../../components/ui/Button';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
+import type { RootStackParamList } from '../../navigation/types';
 
 const { height } = Dimensions.get('window');
 
@@ -25,7 +27,7 @@ const FEATURES = [
 ];
 
 export default function WelcomeScreen() {
-  const router = useRouter();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, fontFamily, fontSize, borderRadius } = useAppTheme();
 
   return (
@@ -164,7 +166,7 @@ export default function WelcomeScreen() {
         >
           <Button
             label="Get Started"
-            onPress={() => router.push('/(auth)/signup')}
+            onPress={() => navigation.navigate('Signup')}
             variant="primary"
             size="lg"
             icon="arrow-forward"
@@ -172,7 +174,7 @@ export default function WelcomeScreen() {
           />
           <Button
             label="I already have an account"
-            onPress={() => router.push('/(auth)/login')}
+            onPress={() => navigation.navigate('Login')}
             variant="secondary"
             size="lg"
             style={{ marginTop: spacing[3] }}

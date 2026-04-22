@@ -3,7 +3,7 @@
 # dependencies
 node_modules/
 
-# Expo
+# Expo leftovers
 .expo/
 dist/
 web-build/
@@ -36,6 +36,8 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# native build output
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/build/

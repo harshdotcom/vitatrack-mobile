@@ -11,8 +11,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GradientBackground } from '../../components/layout/GradientBackground';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -23,6 +25,7 @@ import type {
   DocumentAnalysis,
   DocumentDetails,
 } from '../../types/dashboard.types';
+import type { RootStackParamList } from '../../navigation/types';
 
 function parseTags(tags?: string | string[]) {
   if (!tags) return [];
@@ -226,8 +229,9 @@ function buildFileFacts(document: DocumentDetails) {
 }
 
 export default function DocumentDetailsScreen() {
-  const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'DocumentDetails'>>();
+  const id = route.params?.id;
   const { colors, fontFamily, fontSize, borderRadius, shadow, isDark } = useAppTheme();
 
   const [loading, setLoading] = useState(true);
@@ -341,7 +345,7 @@ export default function DocumentDetailsScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => navigation.goBack()}
               style={[
                 styles.iconButton,
                 {
@@ -390,7 +394,7 @@ export default function DocumentDetailsScreen() {
               </Text>
               <Button
                 label="Back to Dashboard"
-                onPress={() => router.back()}
+                onPress={() => navigation.goBack()}
                 variant="secondary"
                 size="sm"
               />

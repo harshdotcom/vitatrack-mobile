@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import { MotiView } from 'moti';
 import { GradientBackground } from '../../components/layout/GradientBackground';
 import { SafeKeyboardView } from '../../components/layout/SafeKeyboardView';
@@ -10,10 +12,12 @@ import { OtpInput } from '../../components/ui/OtpInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
+import type { RootStackParamList } from '../../navigation/types';
 
 export default function VerifyOtpScreen() {
-  const router = useRouter();
-  const { email } = useLocalSearchParams<{ email: string }>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'VerifyOtp'>>();
+  const email = route.params?.email ?? '';
   const { verifyOtp, resendOtp, clearError, error } = useAuth();
   const { colors, fontFamily, fontSize } = useAppTheme();
 
@@ -37,7 +41,7 @@ export default function VerifyOtpScreen() {
     if (otp.length !== 6) return;
     setIsVerifying(true);
     try {
-      await verifyOtp({ email: email || '', otp });
+      await verifyOtp({ email, otp });
     } catch (e) {
       console.log('OTP Verification error', e);
     } finally {
@@ -48,7 +52,7 @@ export default function VerifyOtpScreen() {
   const handleResend = async () => {
     setResendLoading(true);
     try {
-      await resendOtp({ email: email || '' });
+      await resendOtp({ email });
       setCountdown(60);
     } catch (e) {
       console.log('OTP Resend error', e);
@@ -66,7 +70,7 @@ export default function VerifyOtpScreen() {
           transition={{ type: 'timing', duration: 400 }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >

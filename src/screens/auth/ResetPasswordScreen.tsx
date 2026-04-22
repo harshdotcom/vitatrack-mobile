@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,6 +16,7 @@ import { OtpInput } from '../../components/ui/OtpInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
+import type { RootStackParamList } from '../../navigation/types';
 
 const resetPasswordSchema = z
   .object({
@@ -28,8 +31,9 @@ const resetPasswordSchema = z
 type ResetPasswordForm = z.infer<typeof resetPasswordSchema>;
 
 export default function ResetPasswordScreen() {
-  const router = useRouter();
-  const { email } = useLocalSearchParams<{ email: string }>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'ResetPassword'>>();
+  const email = route.params?.email ?? '';
   const { resetPasswordAndNavigate, clearError, error } = useAuth();
   const { colors, fontFamily, fontSize } = useAppTheme();
 
@@ -55,7 +59,7 @@ export default function ResetPasswordScreen() {
     clearError();
     try {
       await resetPasswordAndNavigate({
-        email: email || '',
+        email,
         otp,
         new_password: data.password,
       });
@@ -75,7 +79,7 @@ export default function ResetPasswordScreen() {
           transition={{ type: 'timing', duration: 400 }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >

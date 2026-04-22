@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,6 +20,7 @@ import { Logo } from '../../components/ui/Logo';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
+import type { RootStackParamList } from '../../navigation/types';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -34,7 +35,7 @@ const signupSchema = z.object({
 type SignupForm = z.infer<typeof signupSchema>;
 
 export default function SignupScreen() {
-  const router = useRouter();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { signupAndNavigate, isLoading, clearError } = useAuth();
   const { colors, fontFamily, fontSize } = useAppTheme();
   const [apiError, setApiError] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export default function SignupScreen() {
           transition={{ type: 'timing', duration: 400 }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -217,7 +218,7 @@ export default function SignupScreen() {
               <Text style={[{ fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textMuted }]}>
                 Already have an account?{' '}
               </Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
                 <Text style={[{ fontFamily: fontFamily.semiBold, fontSize: fontSize.sm, color: colors.primary }]}>
                   Sign in
                 </Text>

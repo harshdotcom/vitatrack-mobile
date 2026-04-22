@@ -13,9 +13,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import { type Href, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  launchCamera,
+  launchImageLibrary,
+  type Asset,
+} from 'react-native-image-picker';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GradientBackground } from '../../components/layout/GradientBackground';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -25,6 +30,7 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import { authService } from '../../services/authService';
 import { dashboardService } from '../../services/dashboardService';
 import type { DashboardEntry } from '../../types/dashboard.types';
+import type { RootStackParamList } from '../../navigation/types';
 
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MAX_STORAGE_BYTES = 100 * 1024 * 1024;
@@ -127,20 +133,21 @@ function inferFileExtension(uri: string, mimeType?: string) {
   }
 }
 
-function normalizeUploadAsset(asset: ImagePicker.ImagePickerAsset): SelectedAsset {
-  const extension = inferFileExtension(asset.uri, asset.mimeType);
+function normalizeUploadAsset(asset: Asset): SelectedAsset {
+  const uri = asset.uri || '';
+  const extension = inferFileExtension(uri, asset.type);
   const rawName = asset.fileName || `report-${Date.now()}${extension}`;
   const finalName = /\.[a-zA-Z0-9]+$/.test(rawName) ? rawName : `${rawName}${extension}`;
 
   return {
-    uri: asset.uri,
+    uri,
     name: finalName,
-    type: asset.mimeType || 'image/jpeg',
+    type: asset.type || 'image/jpeg',
   };
 }
 
 export default function DashboardScreen() {
-  const router = useRouter();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, logout } = useAuth();
   const { colors, fontFamily, fontSize, spacing, borderRadius, shadow, isDark } =
     useAppTheme();
@@ -204,6 +211,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     void loadDashboard(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleMonth]);
 
   async function loadDashboard(showPullToRefresh: boolean) {
@@ -277,38 +285,34 @@ export default function DashboardScreen() {
   }
 
   async function pickFromLibrary() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to upload reports.');
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+    });
+
+    if (result.errorMessage) {
+      Alert.alert('Image picker error', result.errorMessage);
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 0.85,
-    });
-
-    if (!result.canceled) {
+    if (!result.didCancel && result.assets?.[0]?.uri) {
       const asset = result.assets[0];
       setSelectedAsset(normalizeUploadAsset(asset));
     }
   }
 
   async function captureFromCamera() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow camera access to capture report photos.');
+    const result = await launchCamera({
+      mediaType: 'photo',
+      quality: 0.8,
+    });
+
+    if (result.errorMessage) {
+      Alert.alert('Camera error', result.errorMessage);
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 0.85,
-    });
-
-    if (!result.canceled) {
+    if (!result.didCancel && result.assets?.[0]?.uri) {
       const asset = result.assets[0];
       setSelectedAsset(normalizeUploadAsset(asset));
     }
@@ -997,7 +1001,7 @@ export default function DashboardScreen() {
                       key={entry.id}
                       onPress={() => {
                         if (entry.entry_type === 'document') {
-                          router.push(`/document/${entry.id}` as Href);
+                          navigation.navigate('DocumentDetails', { id: String(entry.id) });
                         }
                       }}
                       style={[

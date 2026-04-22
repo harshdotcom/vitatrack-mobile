@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,6 +14,7 @@ import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
+import type { RootStackParamList } from '../../navigation/types';
 
 const forgotPasswordSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email'),
@@ -21,7 +23,7 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordScreen() {
-  const router = useRouter();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { forgotPassword, clearError, error } = useAuth();
   const { colors, fontFamily, fontSize } = useAppTheme();
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +38,7 @@ export default function ForgotPasswordScreen() {
     clearError();
     try {
       await forgotPassword({ email: data.email }, () => {
-        router.push({ pathname: '/(auth)/reset-password', params: { email: data.email } });
+        navigation.navigate('ResetPassword', { email: data.email });
       });
     } catch (e) {
       console.log('Forgot password error', e);
@@ -54,7 +56,7 @@ export default function ForgotPasswordScreen() {
           transition={{ type: 'timing', duration: 400 }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >

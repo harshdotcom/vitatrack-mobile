@@ -26,6 +26,12 @@ interface AuthStore {
   hydrateFromStorage: () => Promise<void>;
 }
 
+function sanitizeUser(user: AuthUser & { password?: string }): AuthUser {
+  const safeUser = { ...user };
+  delete safeUser.password;
+  return safeUser;
+}
+
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   token: null,
@@ -40,7 +46,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       const res = await authService.login(payload);
       await tokenStorage.save(res.token);
-      const { password: _pw, ...safeUser } = res.user as AuthUser & { password?: string };
+      const safeUser = sanitizeUser(res.user as AuthUser & { password?: string });
       await userStorage.save(safeUser);
       set({
         user: safeUser,
@@ -77,7 +83,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       const res = await authService.googleLogin(idToken);
       await tokenStorage.save(res.token);
-      const { password: _pw, ...safeUser } = res.user as AuthUser & { password?: string };
+      const safeUser = sanitizeUser(res.user as AuthUser & { password?: string });
       await userStorage.save(safeUser);
       set({
         user: safeUser,
