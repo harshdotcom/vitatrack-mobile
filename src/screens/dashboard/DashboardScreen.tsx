@@ -25,16 +25,35 @@ import { GradientBackground } from '../../components/layout/GradientBackground';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Logo } from '../../components/ui/Logo';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { authService } from '../../services/authService';
 import { dashboardService } from '../../services/dashboardService';
 import type { DashboardEntry } from '../../types/dashboard.types';
 import type { RootStackParamList } from '../../navigation/types';
+import { DayDetailsDrawer } from './components/DayDetailsDrawer';
+import {
+  DashboardViewToggle,
+  type DashboardViewMode,
+} from './components/DashboardViewToggle';
+import { SelectedDaySummaryCard } from './components/SelectedDaySummaryCard';
+import { TimelineView } from './components/TimelineView';
+import {
+  flattenCalendarResponse,
+  getCalendarGrid,
+  getEntrySummary,
+  getEntryTitle,
+  normalizeEntry,
+  safeIsoDate,
+  toDateKey,
+} from './dashboardUtils';
 
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MAX_STORAGE_BYTES = 100 * 1024 * 1024;
 const CATEGORY_OPTIONS = ['Medical Report', 'Prescription', 'Other'] as const;
+const TIMELINE_MONTHS_PER_PAGE = 3;
+const TIMELINE_MAX_LOOKBACK_MONTHS = 24;
 
 type SelectedAsset = {
   uri: string;
@@ -42,75 +61,9 @@ type SelectedAsset = {
   type: string;
 };
 
-function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getCalendarGrid(baseDate: Date) {
-  const startOfMonth = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
-  const gridStart = new Date(startOfMonth);
-  gridStart.setDate(startOfMonth.getDate() - startOfMonth.getDay());
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-    return date;
-  });
-}
-
-function normalizeEntry(entry: DashboardEntry): DashboardEntry {
-  return {
-    id: entry.id,
-    entry_type: entry.entry_type === 'direct_entry' ? 'direct_entry' : 'document',
-    category: entry.category || 'Document',
-    document_name: entry.document_name || entry.metric_label || 'Untitled',
-    status: entry.status || 'uploaded',
-    document_date: entry.document_date || entry.timestamp || '',
-    analysis_generated: Boolean(entry.analysis_generated),
-    metric_type: entry.metric_type,
-    metric_label: entry.metric_label,
-    metric_summary: entry.metric_summary,
-    timestamp: entry.timestamp,
-    tags: entry.tags,
-  };
-}
-
-function getEntryTitle(entry: DashboardEntry) {
-  return entry.entry_type === 'direct_entry'
-    ? entry.metric_label || entry.document_name || 'Direct Entry'
-    : entry.document_name || 'Document';
-}
-
-function getEntrySummary(entry: DashboardEntry) {
-  return entry.entry_type === 'direct_entry'
-    ? entry.metric_summary || 'Logged directly in VitaTrack'
-    : entry.category || 'Document';
-}
-
-function getEntryTime(entry: DashboardEntry) {
-  const raw = entry.timestamp || entry.document_date;
-  if (!raw) {
-    return '';
-  }
-
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 function formatBytes(bytes: number) {
   const mb = bytes / (1024 * 1024);
   return `${mb.toFixed(1)} MB`;
-}
-
-function safeIsoDate(value: Date = new Date()) {
-  return value.toISOString().split('T')[0];
 }
 
 function inferFileExtension(uri: string, mimeType?: string) {
@@ -159,8 +112,16 @@ export default function DashboardScreen() {
   const [visibleMonth, setVisibleMonth] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
+  const [viewMode, setViewMode] = useState<DashboardViewMode>('calendar');
   const [selectedDateKey, setSelectedDateKey] = useState(toDateKey(today));
   const [reportsMap, setReportsMap] = useState<Record<string, DashboardEntry[]>>({});
+  const [timelineEntries, setTimelineEntries] = useState<DashboardEntry[]>([]);
+  const [timelineCursorMonth, setTimelineCursorMonth] = useState<Date | null>(null);
+  const [timelineLoadedMonthCount, setTimelineLoadedMonthCount] = useState(0);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineLoadingMore, setTimelineLoadingMore] = useState(false);
+  const [hasMoreTimelineEntries, setHasMoreTimelineEntries] = useState(true);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [storageUsedBytes, setStorageUsedBytes] = useState(0);
   const [aiUsedCredit, setAiUsedCredit] = useState(0);
   const [aiLeftCredit, setAiLeftCredit] = useState(0);
@@ -169,6 +130,7 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [screenError, setScreenError] = useState<string | null>(null);
+  const [isDayDetailsOpen, setIsDayDetailsOpen] = useState(false);
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<SelectedAsset | null>(null);
@@ -192,16 +154,6 @@ export default function DashboardScreen() {
     day: 'numeric',
   });
 
-  const monthlyEntries = useMemo(
-    () =>
-      Object.entries(reportsMap).reduce((count, [, entries]) => count + entries.length, 0),
-    [reportsMap],
-  );
-  const activeDays = useMemo(
-    () => Object.values(reportsMap).filter((entries) => entries.length > 0).length,
-    [reportsMap],
-  );
-
   const storagePercent = Math.min((storageUsedBytes / MAX_STORAGE_BYTES) * 100, 100);
   const aiCreditPercent = aiTotalCredit
     ? Math.min((aiUsedCredit / aiTotalCredit) * 100, 100)
@@ -213,6 +165,13 @@ export default function DashboardScreen() {
     void loadDashboard(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleMonth]);
+
+  useEffect(() => {
+    if (viewMode === 'timeline') {
+      void loadTimelinePage(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, visibleMonth]);
 
   async function loadDashboard(showPullToRefresh: boolean) {
     if (showPullToRefresh) {
@@ -266,6 +225,111 @@ export default function DashboardScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  }
+
+  async function loadTimelinePage(reset = false) {
+    const baseMonth = reset
+      ? new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1)
+      : timelineCursorMonth;
+    const initialLoadedMonthCount = reset ? 0 : timelineLoadedMonthCount;
+
+    if (!baseMonth) {
+      setHasMoreTimelineEntries(false);
+      return;
+    }
+
+    if (reset) {
+      setTimelineLoading(true);
+      setTimelineError(null);
+      setHasMoreTimelineEntries(true);
+      setTimelineCursorMonth(baseMonth);
+      setTimelineLoadedMonthCount(0);
+    } else {
+      if (timelineLoadingMore || !hasMoreTimelineEntries) {
+        return;
+      }
+      setTimelineLoadingMore(true);
+    }
+
+    try {
+      const batchEntries: DashboardEntry[] = [];
+      let monthPointer = new Date(baseMonth);
+      let monthsLoaded = initialLoadedMonthCount;
+      let monthsFetched = 0;
+
+      while (
+        monthsFetched < TIMELINE_MONTHS_PER_PAGE &&
+        monthsLoaded < TIMELINE_MAX_LOOKBACK_MONTHS
+      ) {
+        const response = await dashboardService.getMonthlyReports(
+          monthPointer.getMonth() + 1,
+          monthPointer.getFullYear(),
+        );
+
+        batchEntries.push(...flattenCalendarResponse(response));
+        monthPointer = new Date(monthPointer.getFullYear(), monthPointer.getMonth() - 1, 1);
+        monthsFetched += 1;
+        monthsLoaded += 1;
+      }
+
+      batchEntries.sort((left, right) => {
+        const leftTime = new Date(left.timestamp || left.document_date || 0).getTime();
+        const rightTime = new Date(right.timestamp || right.document_date || 0).getTime();
+        return rightTime - leftTime;
+      });
+
+      setTimelineEntries((currentEntries) =>
+        reset ? batchEntries : [...currentEntries, ...batchEntries],
+      );
+      setTimelineCursorMonth(
+        monthsLoaded < TIMELINE_MAX_LOOKBACK_MONTHS ? monthPointer : null,
+      );
+      setTimelineLoadedMonthCount(monthsLoaded);
+      setHasMoreTimelineEntries(monthsLoaded < TIMELINE_MAX_LOOKBACK_MONTHS);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load timeline.';
+      setTimelineError(message);
+    } finally {
+      setTimelineLoading(false);
+      setTimelineLoadingMore(false);
+    }
+  }
+
+  async function refreshDashboard() {
+    await Promise.all([
+      loadDashboard(true),
+      viewMode === 'timeline' || timelineEntries.length > 0
+        ? loadTimelinePage(true)
+        : Promise.resolve(),
+    ]);
+  }
+
+  function handleChangeViewMode(mode: DashboardViewMode) {
+    setViewMode(mode);
+  }
+
+  function openDayDetails(dateKey: string) {
+    setSelectedDateKey(dateKey);
+    setIsDayDetailsOpen(true);
+  }
+
+  function closeDayDetails() {
+    setIsDayDetailsOpen(false);
+  }
+
+  function handleOpenUploadFromDrawer() {
+    closeDayDetails();
+    openUploadModal();
+  }
+
+  function handleOpenDocumentFromDrawer(entryId: string) {
+    closeDayDetails();
+    navigation.navigate('DocumentDetails', { id: entryId });
+  }
+
+  function handleOpenTimelineDocument(entryId: string) {
+    navigation.navigate('DocumentDetails', { id: entryId });
   }
 
   function openUploadModal() {
@@ -357,7 +421,12 @@ export default function DashboardScreen() {
       });
 
       setIsUploadModalOpen(false);
-      await loadDashboard(false);
+      await Promise.all([
+        loadDashboard(false),
+        viewMode === 'timeline' || timelineEntries.length > 0
+          ? loadTimelinePage(true)
+          : Promise.resolve(),
+      ]);
       Alert.alert('Uploaded', 'Your report has been added to the dashboard.');
     } catch (error) {
       const message =
@@ -401,7 +470,7 @@ export default function DashboardScreen() {
             { paddingHorizontal: compact ? spacing[4] : spacing[5], paddingBottom: spacing[12] },
           ]}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => void loadDashboard(true)} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => void refreshDashboard()} />
           }
           showsVerticalScrollIndicator={false}
         >
@@ -417,27 +486,8 @@ export default function DashboardScreen() {
           >
             <View style={styles.headerTopRow}>
               <View style={styles.brandRow}>
-                <View
-                  style={[
-                    styles.brandMark,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(45, 212, 191, 0.14)'
-                        : 'rgba(13, 148, 136, 0.12)',
-                    },
-                  ]}
-                >
-                  <Ionicons name="pulse-outline" size={16} color={colors.primary} />
-                </View>
                 <View style={styles.headerIdentity}>
-                  <Text
-                    style={[
-                      styles.brandText,
-                      { color: colors.textMain, fontFamily: fontFamily.bold },
-                    ]}
-                  >
-                    Vita<Text style={{ color: colors.primary }}>track.ai</Text>
-                  </Text>
+                  <Logo size={compact ? 'sm' : 'md'} />
                   <Text
                     style={[
                       styles.headerMiniCopy,
@@ -467,12 +517,12 @@ export default function DashboardScreen() {
                   style={[
                     styles.quickIconButton,
                     {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.borderSubtle,
+                      backgroundColor: colors.errorBg,
+                      borderColor: colors.errorBorder,
                     },
                   ]}
                 >
-                  <Ionicons name="log-out-outline" size={18} color={colors.textMuted} />
+                  <Ionicons name="log-out-outline" size={18} color={colors.errorText} />
                 </Pressable>
               </View>
             </View>
@@ -563,53 +613,6 @@ export default function DashboardScreen() {
             ))}
           </View>
 
-          <View style={styles.summaryStrip}>
-            <Card style={{ ...styles.summaryStripCard, ...(compact ? styles.summaryStripCardCompact : {}) }}>
-              <Text
-                style={[
-                  styles.summaryStripLabel,
-                  { color: colors.textMuted, fontFamily: fontFamily.medium },
-                ]}
-              >
-                Entries this month
-              </Text>
-              <Text
-                style={[
-                  styles.summaryStripValue,
-                  {
-                    color: colors.textMain,
-                    fontFamily: fontFamily.bold,
-                    fontSize: compact ? fontSize.xl : fontSize['2xl'],
-                  },
-                ]}
-              >
-                {monthlyEntries}
-              </Text>
-            </Card>
-            <Card style={{ ...styles.summaryStripCard, ...(compact ? styles.summaryStripCardCompact : {}) }}>
-              <Text
-                style={[
-                  styles.summaryStripLabel,
-                  { color: colors.textMuted, fontFamily: fontFamily.medium },
-                ]}
-              >
-                Active days
-              </Text>
-              <Text
-                style={[
-                  styles.summaryStripValue,
-                  {
-                    color: colors.textMain,
-                    fontFamily: fontFamily.bold,
-                    fontSize: compact ? fontSize.xl : fontSize['2xl'],
-                  },
-                ]}
-              >
-                {activeDays}
-              </Text>
-            </Card>
-          </View>
-
           <Card style={{ ...styles.calendarCard, ...shadow.md }}>
             <View
               style={[
@@ -624,7 +627,7 @@ export default function DashboardScreen() {
                     { color: colors.textMuted, fontFamily: fontFamily.medium },
                   ]}
                 >
-                  Calendar
+                  {viewMode === 'calendar' ? 'Calendar' : 'Timeline'}
                 </Text>
                 <View style={styles.calendarHeaderTitleRow}>
                   <Text
@@ -637,61 +640,53 @@ export default function DashboardScreen() {
                       },
                     ]}
                   >
-                    {monthTitle}
+                    {viewMode === 'calendar' ? monthTitle : 'Document Timeline'}
                   </Text>
-                  <View
-                    style={[
-                      styles.monthStatusPill,
-                      {
-                        backgroundColor: isDark
-                          ? 'rgba(45, 212, 191, 0.12)'
-                          : 'rgba(13, 148, 136, 0.08)',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.monthStatusPillText,
-                        { color: colors.primary, fontFamily: fontFamily.semiBold },
-                      ]}
-                    >
-                      {monthlyEntries} entries
-                    </Text>
-                  </View>
                 </View>
               </View>
 
-              <View style={styles.navRow}>
-                <Pressable
-                  onPress={() =>
-                    setVisibleMonth(
-                      new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1),
-                    )
-                  }
-                  style={[
-                    styles.navButton,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  <Ionicons name="chevron-back" size={18} color={colors.textMain} />
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    setVisibleMonth(
-                      new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1),
-                    )
-                  }
-                  style={[
-                    styles.navButton,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMain} />
-                </Pressable>
+              <View
+                style={[
+                  styles.toolbarActions,
+                  compact && styles.toolbarActionsCompact,
+                ]}
+              >
+                <DashboardViewToggle value={viewMode} onChange={handleChangeViewMode} />
+
+                {viewMode === 'calendar' ? (
+                  <View style={styles.navRow}>
+                    <Pressable
+                      onPress={() =>
+                        setVisibleMonth(
+                          new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1),
+                        )
+                      }
+                      style={[
+                        styles.navButton,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                      ]}
+                    >
+                      <Ionicons name="chevron-back" size={18} color={colors.textMain} />
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        setVisibleMonth(
+                          new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1),
+                        )
+                      }
+                      style={[
+                        styles.navButton,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                      ]}
+                    >
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMain} />
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             </View>
 
-            {screenError ? (
+            {screenError && viewMode === 'calendar' ? (
               <View
                 style={[
                   styles.banner,
@@ -712,406 +707,198 @@ export default function DashboardScreen() {
               </View>
             ) : null}
 
-            <View style={styles.weekRow}>
-              {WEEK_DAYS.map((day) => (
-                <Text
-                  key={day}
-                  style={[
-                    styles.weekDay,
-                    {
-                      color: colors.textMuted,
-                      fontFamily: fontFamily.medium,
-                      fontSize: compact ? fontSize.xs : fontSize.sm,
-                    },
-                  ]}
-                >
-                  {compact ? day.slice(0, 1) : day}
-                </Text>
-              ))}
-            </View>
-
-            {loading ? (
-              <View style={styles.loaderWrap}>
-                <ActivityIndicator color={colors.primary} />
-                <Text
-                  style={[
-                    styles.loaderText,
-                    { color: colors.textMuted, fontFamily: fontFamily.medium },
-                  ]}
-                >
-                  Loading dashboard
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.calendarGrid}>
-                {calendarDays.map((date) => {
-                  const dateKey = toDateKey(date);
-                  const entries = reportsMap[dateKey] ?? [];
-                  const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-                  const isSelected = dateKey === selectedDateKey;
-                  const isToday = dateKey === toDateKey(today);
-
-                  return (
-                    <Pressable
-                      key={dateKey}
-                      onPress={() => setSelectedDateKey(dateKey)}
+            {viewMode === 'calendar' ? (
+              <>
+                <View style={styles.weekRow}>
+                  {WEEK_DAYS.map((day) => (
+                    <Text
+                      key={day}
                       style={[
-                        styles.dayCell,
+                        styles.weekDay,
                         {
-                          backgroundColor: isSelected
-                            ? isDark
-                              ? 'rgba(45, 212, 191, 0.16)'
-                              : 'rgba(13, 148, 136, 0.10)'
-                            : colors.surfaceSoft,
-                          borderColor: isSelected ? colors.primary : colors.borderSubtle,
-                          opacity: isCurrentMonth ? 1 : 0.42,
-                          minHeight: compact ? 84 : 96,
+                          color: colors.textMuted,
+                          fontFamily: fontFamily.medium,
+                          fontSize: compact ? fontSize.xs : fontSize.sm,
                         },
                       ]}
                     >
-                      <View style={styles.dayCellHeader}>
-                        <Text
+                      {compact ? day.slice(0, 1) : day}
+                    </Text>
+                  ))}
+                </View>
+
+                {loading ? (
+                  <View style={styles.loaderWrap}>
+                    <ActivityIndicator color={colors.primary} />
+                    <Text
+                      style={[
+                        styles.loaderText,
+                        { color: colors.textMuted, fontFamily: fontFamily.medium },
+                      ]}
+                    >
+                      Loading dashboard
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.calendarGrid}>
+                    {calendarDays.map((date) => {
+                      const dateKey = toDateKey(date);
+                      const entries = reportsMap[dateKey] ?? [];
+                      const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
+                      const isSelected = dateKey === selectedDateKey;
+                      const isToday = dateKey === toDateKey(today);
+
+                      return (
+                        <Pressable
+                          key={dateKey}
+                          onPress={() => openDayDetails(dateKey)}
                           style={[
-                            styles.dayNumber,
+                            styles.dayCell,
                             {
-                              color: isToday || isSelected ? colors.primary : colors.textMain,
-                              fontFamily: isSelected ? fontFamily.bold : fontFamily.medium,
+                              backgroundColor: isSelected
+                                ? isDark
+                                  ? 'rgba(45, 212, 191, 0.16)'
+                                  : 'rgba(13, 148, 136, 0.10)'
+                                : colors.surfaceSoft,
+                              borderColor: isSelected ? colors.primary : colors.borderSubtle,
+                              opacity: isCurrentMonth ? 1 : 0.42,
+                              minHeight: compact ? 84 : 96,
                             },
                           ]}
                         >
-                          {date.getDate()}
-                        </Text>
-
-                        {entries.length > 0 ? (
-                          <View
-                            style={[
-                              styles.dayCountPill,
-                              {
-                                backgroundColor: isDark
-                                  ? 'rgba(45, 212, 191, 0.14)'
-                                  : 'rgba(13, 148, 136, 0.08)',
-                              },
-                            ]}
-                          >
+                          <View style={styles.dayCellHeader}>
                             <Text
                               style={[
-                                styles.dayCountText,
-                                { color: colors.primary, fontFamily: fontFamily.semiBold },
-                              ]}
-                            >
-                              {entries.length}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      {entries.length > 0 ? (
-                        <View style={styles.dayPreview}>
-                          <View style={styles.dayPreviewTop}>
-                            <View
-                              style={[
-                                styles.entryStripe,
+                                styles.dayNumber,
                                 {
-                                  backgroundColor:
-                                    entries[0].entry_type === 'direct_entry'
-                                      ? colors.secondary
-                                      : colors.primary,
+                                  color:
+                                    isToday || isSelected ? colors.primary : colors.textMain,
+                                  fontFamily: isSelected
+                                    ? fontFamily.bold
+                                    : fontFamily.medium,
                                 },
                               ]}
-                            />
-                            {entries[0].analysis_generated ? (
+                            >
+                              {date.getDate()}
+                            </Text>
+
+                            {entries.length > 0 ? (
                               <View
                                 style={[
-                                  styles.dayAiDot,
-                                  { backgroundColor: colors.successText },
-                                ]}
-                              />
-                            ) : null}
-                          </View>
-                          <Text
-                            numberOfLines={1}
-                            style={[
-                              styles.dayPreviewText,
-                              {
-                                color: colors.textMain,
-                                fontFamily: fontFamily.medium,
-                              },
-                            ]}
-                          >
-                            {getEntryTitle(entries[0])}
-                          </Text>
-                          {!compact ? (
-                            <Text
-                              numberOfLines={1}
-                              style={[
-                                styles.dayPreviewMeta,
-                                {
-                                  color: colors.textPlaceholder,
-                                  fontFamily: fontFamily.regular,
-                                },
-                              ]}
-                            >
-                              {getEntrySummary(entries[0])}
-                            </Text>
-                          ) : null}
-                        </View>
-                      ) : (
-                        <View style={styles.emptyDaySpacer} />
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-          </Card>
-
-          <Card style={{ ...styles.timelineCard, ...shadow.sm }}>
-            <View
-              style={[
-                styles.timelineHeader,
-                compact && { alignItems: 'flex-start', flexDirection: 'column' },
-              ]}
-            >
-              <View style={styles.timelineHeadingWrap}>
-                <Text
-                  style={[
-                    styles.sectionEyebrow,
-                    { color: colors.textMuted, fontFamily: fontFamily.medium },
-                  ]}
-                >
-                  Selected day
-                </Text>
-                <View style={styles.timelineTitleRow}>
-                  <Text
-                    style={[
-                      styles.timelineTitle,
-                      {
-                        color: colors.textMain,
-                        fontFamily: fontFamily.bold,
-                        fontSize: compact ? fontSize.xl : fontSize['2xl'],
-                      },
-                    ]}
-                  >
-                    {selectedDateLabel}
-                  </Text>
-                  <View
-                    style={[
-                      styles.selectedBadge,
-                      {
-                        backgroundColor: isDark
-                          ? 'rgba(56, 189, 248, 0.12)'
-                          : 'rgba(3, 105, 161, 0.08)',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.selectedBadgeText,
-                        { color: colors.secondary, fontFamily: fontFamily.semiBold },
-                      ]}
-                    >
-                      {selectedEntries.length} record{selectedEntries.length === 1 ? '' : 's'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.timelineMetaRow}>
-              {selectedEntries.length > 0 ? (
-                <Text
-                  style={[
-                    styles.timelineSupportText,
-                    { color: colors.textMuted, fontFamily: fontFamily.regular },
-                  ]}
-                >
-                  Ordered by logged time
-                </Text>
-              ) : null}
-            </View>
-
-            {selectedEntries.length === 0 ? (
-              <View
-                style={[
-                  styles.emptyState,
-                  {
-                    backgroundColor: colors.surfaceSubtle,
-                    borderColor: colors.borderSubtle,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.emptyStateIconWrap,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(148, 163, 184, 0.08)'
-                        : 'rgba(148, 163, 184, 0.10)',
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="calendar-clear-outline"
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                </View>
-                <View style={styles.emptyStateCopy}>
-                  <Text
-                    style={[
-                      styles.emptyTitle,
-                      { color: colors.textMain, fontFamily: fontFamily.semiBold },
-                    ]}
-                  >
-                    No entries on this day
-                  </Text>
-                  <Text
-                    style={[
-                      styles.emptyText,
-                      { color: colors.textMuted, fontFamily: fontFamily.regular },
-                    ]}
-                  >
-                    Use Upload Report to add prescriptions, reports, and other health records.
-                  </Text>
-                </View>
-                <Button
-                  label="Upload Report"
-                  onPress={openUploadModal}
-                  size="sm"
-                  fullWidth={false}
-                  style={styles.emptyStateButton}
-                />
-              </View>
-            ) : (
-              <View style={styles.entryList}>
-                {selectedEntries.map((entry) => {
-                  const accent =
-                    entry.entry_type === 'direct_entry' ? colors.secondary : colors.primary;
-                  const tint =
-                    entry.entry_type === 'direct_entry'
-                      ? isDark
-                        ? 'rgba(56, 189, 248, 0.12)'
-                        : 'rgba(3, 105, 161, 0.10)'
-                      : isDark
-                        ? 'rgba(45, 212, 191, 0.12)'
-                        : 'rgba(13, 148, 136, 0.10)';
-
-                  return (
-                    <Pressable
-                      key={entry.id}
-                      onPress={() => {
-                        if (entry.entry_type === 'document') {
-                          navigation.navigate('DocumentDetails', { id: String(entry.id) });
-                        }
-                      }}
-                      style={[
-                        styles.entryCard,
-                        {
-                          backgroundColor: colors.surfaceSoft,
-                          borderColor: colors.borderSubtle,
-                        },
-                      ]}
-                    >
-                      <View style={styles.entryMain}>
-                        <View style={[styles.entryIcon, { backgroundColor: tint }]}>
-                          <Ionicons
-                            name={
-                              entry.entry_type === 'direct_entry'
-                                ? 'pulse-outline'
-                                : 'document-text-outline'
-                            }
-                            size={18}
-                            color={accent}
-                          />
-                        </View>
-                        <View style={styles.entryCopy}>
-                          <View style={styles.entryTitleRow}>
-                            <Text
-                              style={[
-                                styles.entryTitle,
-                                {
-                                  color: colors.textMain,
-                                  fontFamily: fontFamily.semiBold,
-                                },
-                              ]}
-                            >
-                              {getEntryTitle(entry)}
-                            </Text>
-                          </View>
-                          <Text
-                            style={[
-                              styles.entrySubtitle,
-                              {
-                                color: colors.textMuted,
-                                fontFamily: fontFamily.regular,
-                              },
-                            ]}
-                          >
-                            {getEntrySummary(entry)}
-                          </Text>
-                          <View style={styles.entryFooterRow}>
-                            {entry.analysis_generated ? (
-                              <View
-                                style={[
-                                  styles.aiReadyTag,
+                                  styles.dayCountPill,
                                   {
                                     backgroundColor: isDark
-                                      ? 'rgba(34, 197, 94, 0.15)'
-                                      : 'rgba(22, 163, 74, 0.10)',
+                                      ? 'rgba(45, 212, 191, 0.14)'
+                                      : 'rgba(13, 148, 136, 0.08)',
                                   },
                                 ]}
                               >
                                 <Text
                                   style={[
-                                    styles.aiReadyTagText,
+                                    styles.dayCountText,
                                     {
-                                      color: colors.successText,
+                                      color: colors.primary,
                                       fontFamily: fontFamily.semiBold,
                                     },
                                   ]}
                                 >
-                                  AI Ready
+                                  {entries.length}
                                 </Text>
                               </View>
                             ) : null}
-                            <Text
-                              style={[
-                                styles.entryTimeInline,
-                                {
-                                  color: colors.textPlaceholder,
-                                  fontFamily: fontFamily.medium,
-                                },
-                              ]}
-                            >
-                              {getEntryTime(entry)}
-                            </Text>
                           </View>
-                        </View>
-                      </View>
-                      <View style={styles.entryMeta}>
-                        <Text
-                          style={[
-                            styles.entryKind,
-                            { color: accent, fontFamily: fontFamily.semiBold },
-                          ]}
-                        >
-                          {entry.entry_type === 'direct_entry' ? 'Vital' : 'Document'}
-                        </Text>
-                        {entry.entry_type === 'document' ? (
-                          <Ionicons
-                            name="chevron-forward"
-                            size={16}
-                            color={colors.textPlaceholder}
-                          />
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
+
+                          {entries.length > 0 ? (
+                            <View style={styles.dayPreview}>
+                              <View style={styles.dayPreviewTop}>
+                                <View
+                                  style={[
+                                    styles.entryStripe,
+                                    {
+                                      backgroundColor:
+                                        entries[0].entry_type === 'direct_entry'
+                                          ? colors.secondary
+                                          : colors.primary,
+                                    },
+                                  ]}
+                                />
+                                {entries[0].analysis_generated ? (
+                                  <View
+                                    style={[
+                                      styles.dayAiDot,
+                                      { backgroundColor: colors.successText },
+                                    ]}
+                                  />
+                                ) : null}
+                              </View>
+                              <Text
+                                numberOfLines={1}
+                                style={[
+                                  styles.dayPreviewText,
+                                  {
+                                    color: colors.textMain,
+                                    fontFamily: fontFamily.medium,
+                                  },
+                                ]}
+                              >
+                                {getEntryTitle(entries[0])}
+                              </Text>
+                              {!compact ? (
+                                <Text
+                                  numberOfLines={1}
+                                  style={[
+                                    styles.dayPreviewMeta,
+                                    {
+                                      color: colors.textPlaceholder,
+                                      fontFamily: fontFamily.regular,
+                                    },
+                                  ]}
+                                >
+                                  {getEntrySummary(entries[0])}
+                                </Text>
+                              ) : null}
+                            </View>
+                          ) : (
+                            <View style={styles.emptyDaySpacer} />
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </>
+            ) : (
+              <TimelineView
+                entries={timelineEntries}
+                loading={timelineLoading}
+                loadingMore={timelineLoadingMore}
+                hasMore={hasMoreTimelineEntries}
+                error={timelineError}
+                onLoadMore={() => void loadTimelinePage(false)}
+                onOpenDocument={handleOpenTimelineDocument}
+                onOpenUpload={openUploadModal}
+              />
             )}
           </Card>
+
+          {viewMode === 'calendar' ? (
+            <SelectedDaySummaryCard
+              compact={compact}
+              selectedDateLabel={selectedDateLabel}
+              selectedEntries={selectedEntries}
+              onOpenDetails={() => openDayDetails(selectedDateKey)}
+            />
+          ) : null}
         </ScrollView>
+
+        <DayDetailsDrawer
+          visible={isDayDetailsOpen}
+          selectedDateLabel={selectedDateLabel}
+          selectedEntries={selectedEntries}
+          onClose={closeDayDetails}
+          onOpenUpload={handleOpenUploadFromDrawer}
+          onOpenDocument={handleOpenDocumentFromDrawer}
+        />
 
         <Modal
           animationType="slide"
@@ -1358,24 +1145,14 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  brandMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandText: {
-    fontSize: 16,
-    letterSpacing: -0.2,
+    gap: 12,
   },
   headerIdentity: {
-    gap: 1,
+    gap: 4,
   },
   headerMiniCopy: {
     fontSize: 12,
+    marginLeft: 2,
   },
   quickActions: {
     flexDirection: 'row',
@@ -1446,25 +1223,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  summaryStrip: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  summaryStripCard: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 4,
-  },
-  summaryStripCardCompact: {
-    paddingVertical: 10,
-  },
-  summaryStripLabel: {
-    fontSize: 12,
-  },
-  summaryStripValue: {
-    lineHeight: 28,
-  },
   calendarCard: {
     padding: 16,
     gap: 18,
@@ -1474,6 +1232,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+  },
+  toolbarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  toolbarActionsCompact: {
+    width: '100%',
+    justifyContent: 'space-between',
   },
   calendarHeaderCopy: {
     gap: 4,
@@ -1490,14 +1259,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     lineHeight: 32,
-  },
-  monthStatusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  monthStatusPillText: {
-    fontSize: 11,
   },
   navRow: {
     flexDirection: 'row',
@@ -1602,146 +1363,6 @@ const styles = StyleSheet.create({
   },
   emptyDaySpacer: {
     height: 18,
-  },
-  timelineCard: {
-    padding: 16,
-    gap: 18,
-  },
-  timelineHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  timelineTitle: {
-    lineHeight: 30,
-  },
-  timelineHeadingWrap: {
-    gap: 6,
-  },
-  timelineTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  timelineMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    flexWrap: 'wrap',
-    minHeight: 4,
-  },
-  selectedBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  selectedBadgeText: {
-    fontSize: 12,
-  },
-  timelineSupportText: {
-    fontSize: 12,
-  },
-  emptyState: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  emptyStateIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyStateCopy: {
-    gap: 6,
-  },
-  emptyTitle: {
-    fontSize: 15,
-  },
-  emptyText: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'left',
-    maxWidth: 300,
-  },
-  emptyStateButton: {
-    marginTop: 2,
-  },
-  entryList: {
-    gap: 10,
-  },
-  entryCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  entryMain: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  entryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  entryCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  entryTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  entryTitle: {
-    fontSize: 14,
-  },
-  aiReadyTag: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  aiReadyTagText: {
-    fontSize: 10,
-  },
-  entrySubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  entryFooterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 2,
-  },
-  entryTimeInline: {
-    fontSize: 11,
-  },
-  entryMeta: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  entryKind: {
-    fontSize: 12,
   },
   modalOverlay: {
     flex: 1,

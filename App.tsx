@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StatusBar, StyleSheet, View, useColorScheme } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -15,24 +15,38 @@ import ForgotPasswordScreen from './src/screens/auth/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
 import DashboardScreen from './src/screens/dashboard/DashboardScreen';
 import DocumentDetailsScreen from './src/screens/dashboard/DocumentDetailsScreen';
+import AIAnalysisScreen from './src/screens/dashboard/AIAnalysisScreen';
 import { useAuthStore } from './src/store/authStore';
-import { darkColors } from './src/theme/colors';
+import { darkColors, lightColors } from './src/theme/colors';
 import { fontFamily } from './src/theme/typography';
 import type { MainTabParamList, RootStackParamList } from './src/navigation/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+function DashboardTabIcon({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) {
+  return <Ionicons name="home" size={size} color={color} />;
+}
+
 function MainTabs() {
+  const isDark = useColorScheme() === 'dark';
+  const colors = isDark ? darkColors : lightColors;
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: darkColors.tabActive,
-        tabBarInactiveTintColor: darkColors.tabInactive,
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: darkColors.tabBar,
-          borderTopColor: darkColors.borderSubtle,
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.borderSubtle,
         },
         tabBarLabelStyle: {
           fontFamily: fontFamily.medium,
@@ -43,9 +57,7 @@ function MainTabs() {
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
+          tabBarIcon: DashboardTabIcon,
         }}
       />
     </Tab.Navigator>
@@ -53,6 +65,8 @@ function MainTabs() {
 }
 
 export default function App() {
+  const isDark = useColorScheme() === 'dark';
+  const colors = isDark ? darkColors : lightColors;
   const hydrateFromStorage = useAuthStore(state => state.hydrateFromStorage);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -63,16 +77,22 @@ export default function App() {
 
   if (!bootstrapped) {
     return (
-      <View style={styles.loader}>
-        <StatusBar barStyle="light-content" backgroundColor={darkColors.background} />
-        <ActivityIndicator color={darkColors.primary} />
+      <View style={[styles.loader, { backgroundColor: colors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" backgroundColor={darkColors.background} />
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
       <NavigationContainer>
         <Stack.Navigator
           initialRouteName={isAuthenticated ? 'MainTabs' : 'Welcome'}
@@ -86,6 +106,7 @@ export default function App() {
           <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="DocumentDetails" component={DocumentDetailsScreen} />
+          <Stack.Screen name="AIAnalysis" component={AIAnalysisScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
@@ -97,6 +118,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: darkColors.background,
   },
 });

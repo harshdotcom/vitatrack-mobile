@@ -1,14 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
-import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { BrandMark } from './BrandMark';
 import { useAppTheme } from '../../hooks/useAppTheme';
 
 interface LogoProps {
@@ -17,61 +9,26 @@ interface LogoProps {
 }
 
 const SIZE_MAP = {
-  sm: { icon: 28, font: 20 },
-  md: { icon: 40, font: 26 },
-  lg: { icon: 52, font: 34 },
-};
+  sm: { icon: 30, font: 20, gap: 10 },
+  md: { icon: 36, font: 26, gap: 12 },
+  lg: { icon: 44, font: 34, gap: 14 },
+} as const;
 
 export function Logo({ size = 'md', pulse = false }: LogoProps) {
   const { colors, fontFamily } = useAppTheme();
-  const { icon: iconSize, font: fontsize } = SIZE_MAP[size];
-
-  // Heartbeat pulse animation on the icon
-  const scale = useSharedValue(1);
-  useEffect(() => {
-    if (!pulse) return;
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.12, { duration: 300, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: 300, easing: Easing.in(Easing.quad) }),
-        withTiming(1.06, { duration: 200, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: 200, easing: Easing.in(Easing.quad) }),
-      ),
-      -1,
-      false,
-    );
-  }, [pulse, scale]);
-
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const { icon: iconSize, font: fontSize, gap } = SIZE_MAP[size];
 
   return (
-    <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.iconContainer,
-          {
-            width: iconSize,
-            height: iconSize,
-            borderRadius: iconSize / 4,
-            backgroundColor: colors.primary,
-          },
-          pulse && pulseStyle,
-        ]}
-      >
-        {/* Heart + EKG line visual using text */}
-        <Text style={[styles.iconText, { fontSize: iconSize * 0.55 }]}>♥</Text>
-      </Animated.View>
-
-      <View style={styles.textRow}>
+    <View style={[styles.container, { gap }]}>
+      <BrandMark size={iconSize} pulse={pulse} />
+      <View style={styles.wordmark}>
         <Text
           style={[
             styles.brandText,
             {
-              fontFamily: fontFamily.extraBold,
-              fontSize: fontsize,
               color: colors.textMain,
+              fontFamily: fontFamily.extraBold,
+              fontSize,
             },
           ]}
         >
@@ -79,27 +36,26 @@ export function Logo({ size = 'md', pulse = false }: LogoProps) {
         </Text>
         <Text
           style={[
-            styles.brandText,
+            styles.accentText,
             {
-              fontFamily: fontFamily.semiBold,
-              fontSize: fontsize,
               color: colors.primary,
+              fontFamily: fontFamily.bold,
+              fontSize: Math.round(fontSize * 0.98),
             },
           ]}
         >
-          Track
+          track.ai
         </Text>
         <Text
           style={[
-            styles.dotText,
+            styles.signalText,
             {
-              fontFamily: fontFamily.regular,
-              fontSize: fontsize * 0.65,
-              color: colors.textMuted,
+              color: colors.textPlaceholder,
+              fontFamily: fontFamily.medium,
             },
           ]}
         >
-          {' '}.AI
+          Health intelligence
         </Text>
       </View>
     </View>
@@ -110,24 +66,23 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
-  iconContainer: {
-    alignItems: 'center',
+  wordmark: {
     justifyContent: 'center',
   },
-  iconText: {
-    color: '#ffffff',
-  },
-  textRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
   brandText: {
-    letterSpacing: -0.5,
-    lineHeight: undefined,
+    letterSpacing: -0.8,
+    lineHeight: 30,
   },
-  dotText: {
-    letterSpacing: 0.5,
+  accentText: {
+    letterSpacing: -0.8,
+    lineHeight: 30,
+    marginTop: -2,
+  },
+  signalText: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginTop: 1,
   },
 });

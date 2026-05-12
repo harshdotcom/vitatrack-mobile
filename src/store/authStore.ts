@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { tokenStorage, userStorage } from '../api/axios';
 import { authService } from '../services/authService';
+import { googleSignInService } from '../services/googleSignInService';
 import type {
   AuthUser,
   LoginPayload,
@@ -101,6 +102,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   // ── Logout ───────────────────────────────────────────────────────────────
 
   logout: async () => {
+    await googleSignInService.signOut();
     await tokenStorage.remove();
     await userStorage.remove();
     set({ user: null, token: null, isAuthenticated: false, error: null });

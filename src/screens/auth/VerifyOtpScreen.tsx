@@ -13,17 +13,19 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { spacing } from '../../theme/spacing';
 import type { RootStackParamList } from '../../navigation/types';
+import { createAuthBackHandler } from './authNavigation';
 
 export default function VerifyOtpScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'VerifyOtp'>>();
+  const handleBack = createAuthBackHandler(navigation, 'Signup');
   const email = route.params?.email ?? '';
   const { verifyOtp, resendOtp, clearError, error } = useAuth();
   const { colors, fontFamily, fontSize } = useAppTheme();
 
   const [otp, setOtp] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-  const [ResendLoading, setResendLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
 
   useEffect(() => {
@@ -32,13 +34,16 @@ export default function VerifyOtpScreen() {
 
   useEffect(() => {
     if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+      const timer = setTimeout(() => setCountdown((current) => current - 1), 1000);
       return () => clearTimeout(timer);
     }
   }, [countdown]);
 
   const handleVerify = async () => {
-    if (otp.length !== 6) return;
+    if (otp.length !== 6) {
+      return;
+    }
+
     setIsVerifying(true);
     try {
       await verifyOtp({ email, otp });
@@ -70,11 +75,11 @@ export default function VerifyOtpScreen() {
           transition={{ type: 'timing', duration: 400 }}
         >
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={handleBack}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-             <Text style={{ fontSize: 22, color: colors.textMuted }}>←</Text>
+            <Text style={[styles.backIcon, { color: colors.textMuted }]}>{'\u2190'}</Text>
           </TouchableOpacity>
         </MotiView>
 
@@ -86,28 +91,43 @@ export default function VerifyOtpScreen() {
         >
           <Card elevated style={styles.card}>
             <View style={styles.header}>
-              <Text style={[styles.title, { fontFamily: fontFamily.bold, fontSize: fontSize['2xl'], color: colors.textMain }]}>
+              <Text
+                style={[
+                  styles.title,
+                  { fontFamily: fontFamily.bold, fontSize: fontSize['2xl'], color: colors.textMain },
+                ]}
+              >
                 Check your email
               </Text>
-              <Text style={[styles.subtitle, { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textMuted }]}>
+              <Text
+                style={[
+                  styles.subtitle,
+                  { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textMuted },
+                ]}
+              >
                 We've sent a 6-digit code to {email || 'your email'}
               </Text>
             </View>
 
-            {error && (
+            {error ? (
               <MotiView
                 from={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 style={[styles.errorBanner, { backgroundColor: colors.errorBg, borderColor: colors.errorBorder }]}
               >
-                <Text style={[styles.errorBannerText, { fontFamily: fontFamily.medium, fontSize: fontSize.sm, color: colors.errorText }]}>
+                <Text
+                  style={[
+                    styles.errorBannerText,
+                    { fontFamily: fontFamily.medium, fontSize: fontSize.sm, color: colors.errorText },
+                  ]}
+                >
                   {error}
                 </Text>
               </MotiView>
-            )}
+            ) : null}
 
             <View style={styles.otpContainer}>
-               <OtpInput length={6} value={otp} onChange={setOtp} disabled={isVerifying} />
+              <OtpInput length={6} value={otp} onChange={setOtp} disabled={isVerifying} />
             </View>
 
             <Button
@@ -121,13 +141,23 @@ export default function VerifyOtpScreen() {
 
             <View style={styles.resendRow}>
               {countdown > 0 ? (
-                <Text style={[{ fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textMuted }]}>
+                <Text
+                  style={[
+                    styles.resendText,
+                    { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textMuted },
+                  ]}
+                >
                   Resend code in <Text style={{ fontFamily: fontFamily.semiBold }}>{countdown}s</Text>
                 </Text>
               ) : (
-                <TouchableOpacity onPress={handleResend} disabled={ResendLoading}>
-                  <Text style={[{ fontFamily: fontFamily.semiBold, fontSize: fontSize.sm, color: colors.primary }]}>
-                    {ResendLoading ? 'Sending...' : 'Resend Code'}
+                <TouchableOpacity onPress={handleResend} disabled={resendLoading}>
+                  <Text
+                    style={[
+                      styles.resendText,
+                      { fontFamily: fontFamily.semiBold, fontSize: fontSize.sm, color: colors.primary },
+                    ]}
+                  >
+                    {resendLoading ? 'Sending...' : 'Resend Code'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -148,6 +178,9 @@ const styles = StyleSheet.create({
   backBtn: {
     marginBottom: spacing[3],
     padding: spacing[1],
+  },
+  backIcon: {
+    fontSize: 22,
   },
   cardWrapper: {
     width: '100%',
@@ -187,5 +220,8 @@ const styles = StyleSheet.create({
   },
   resendRow: {
     alignItems: 'center',
+  },
+  resendText: {
+    textAlign: 'center',
   },
 });

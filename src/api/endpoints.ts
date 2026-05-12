@@ -4,7 +4,7 @@
  * Local : http://localhost:8081/api/v1
  */
 
-const BASE_URL = 'http://10.0.2.2:8082/api/v1';
+const BASE_URL = 'http://10.11.12.75:8082/api/v1';
 
 export const ENDPOINTS = {
   BASE_URL,
@@ -32,6 +32,7 @@ export const ENDPOINTS = {
   // Documents (protected)
   DOCUMENTS: `${BASE_URL}/documents`,
   DOCUMENTS_CALENDAR: `${BASE_URL}/documents/calendar`,
+  DOCUMENTS_INFINITE_SCROLL: `${BASE_URL}/documents/infiniteScroll`,
   document: (id: string) => `${BASE_URL}/documents/${id}`,
   updateDocument: (id: string) => `${BASE_URL}/documents/update/${id}`,
 

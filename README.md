@@ -1,30 +1,25 @@
 # vitatrack.ai Mobile
 
-React Native CLI app for vitatrack.ai.
+React Native CLI app for `vitatrack.ai`.
 
-This is **not an Expo project**. Use React Native CLI commands only.
+This project is not built with Expo. Use React Native CLI commands only.
 
 ## Requirements
 
-Install these first:
-
 - Node.js 18 or newer
 - npm
-- Android Studio
-- Android SDK
-- Android emulator or Android phone
-- JDK for React Native Android builds
+- Android Studio with Android SDK
+- A running Android emulator or a physical Android device
+- JDK required for React Native Android builds
 - macOS + Xcode + CocoaPods only if you want to run iOS
 
-React Native setup guide:
+Official setup guide:
 
 ```text
 https://reactnative.dev/docs/set-up-your-environment
 ```
 
 ## Install
-
-From the project folder:
 
 ```bash
 npm install
@@ -36,49 +31,59 @@ For iOS on macOS:
 npm run pods
 ```
 
-## API Setup
+## Update API Endpoint
 
-API base URL is here:
+The backend base URL is defined in:
 
 ```text
 src/api/endpoints.ts
 ```
 
-For Android emulator, use:
+Update the `BASE_URL` value there before running the app.
+
+Current shape:
+
+```ts
+const BASE_URL = 'http://YOUR_HOST:8082/api/v1';
+```
+
+Use the correct host for your environment:
+
+### Android Emulator
 
 ```ts
 const BASE_URL = 'http://10.0.2.2:8082/api/v1';
 ```
 
-For iOS simulator, use:
+### iOS Simulator
 
 ```ts
 const BASE_URL = 'http://localhost:8082/api/v1';
 ```
 
-For a real phone, use your computer IP:
+### Physical Device
 
-```ts
-const BASE_URL = 'http://YOUR_LOCAL_IP:8082/api/v1';
-```
-
-Example:
+Use your computer's local network IP address:
 
 ```ts
 const BASE_URL = 'http://192.168.1.22:8082/api/v1';
 ```
 
-## Start Android
+Notes:
 
-Open Android emulator first.
+- Keep the port and `/api/v1` suffix unchanged unless the backend contract changes.
+- For a physical device, make sure the phone and backend machine are on the same network.
+- If the backend host changes, update only `BASE_URL` in `src/api/endpoints.ts`.
+
+## Run on Android
+
+Start the emulator first.
 
 Terminal 1:
 
 ```bash
 npm start -- --reset-cache
 ```
-
-Keep this terminal open.
 
 Terminal 2:
 
@@ -87,7 +92,7 @@ adb reverse tcp:8081 tcp:8081
 npm run android
 ```
 
-## Start iOS
+## Run on iOS
 
 iOS works only on macOS.
 
@@ -105,56 +110,55 @@ npm run ios
 ## Useful Commands
 
 ```bash
-npm start                 # Start Metro
-npm start -- --reset-cache # Start Metro with clean cache
-npm run android           # Build and run Android
-npm run ios               # Build and run iOS
-npm run pods              # Install iOS pods
-npm run lint              # Run lint
-npm test                  # Run tests
-npx tsc --noEmit          # Check TypeScript
+npm start                  # Start Metro
+npm start -- --reset-cache # Start Metro with a clean cache
+npm run android            # Build and run Android
+npm run ios                # Build and run iOS
+npm run pods               # Install iOS pods
+npm run lint               # Run ESLint
+npm test                   # Run tests
+npx tsc --noEmit           # Check TypeScript
 ```
 
-## Architecture
+## Project Structure
 
 ```text
 index.js
   -> Registers the React Native app
 
 App.tsx
-  -> Main app root
-  -> Sets up React Navigation
-  -> Loads saved auth state
-
-src/navigation/
-  -> Route types
-
-src/screens/
-  -> App screens
-  -> Auth screens
-  -> Dashboard screens
-
-src/components/
-  -> Reusable UI components
-
-src/hooks/
-  -> Shared React hooks
-
-src/store/
-  -> Zustand state store
-
-src/services/
-  -> API service functions
+  -> Application root
+  -> Navigation setup
+  -> Auth bootstrap
 
 src/api/
   -> Axios setup
   -> API endpoint constants
 
+src/components/
+  -> Reusable UI components
+
+src/hooks/
+  -> Shared hooks
+
+src/navigation/
+  -> Route types
+
+src/screens/
+  -> Auth screens
+  -> Dashboard screens
+
+src/services/
+  -> API service layer
+
+src/store/
+  -> Zustand state
+
 src/theme/
   -> Colors, spacing, typography
 
 src/types/
-  -> TypeScript app types
+  -> Shared TypeScript types
 
 android/
   -> Native Android project
@@ -180,53 +184,28 @@ ios/
 
 ## Common Fixes
 
-### App is blank on Android
+### Backend is not reachable on Android emulator
 
-Metro is usually not running.
+Use this endpoint in `src/api/endpoints.ts`:
 
-Run:
+```ts
+const BASE_URL = 'http://10.0.2.2:8082/api/v1';
+```
+
+### Metro is not running
 
 ```bash
 npm start -- --reset-cache
 ```
 
-Then:
+### Android app is not connecting to Metro
 
 ```bash
 adb reverse tcp:8081 tcp:8081
 adb shell am start -n com.vitaltrack.ai/.MainActivity
 ```
 
-### Android install says insufficient storage
-
-Free emulator storage:
-
-```bash
-adb uninstall com.vitaltrack.ai
-adb shell pm trim-caches 1G
-```
-
-If it still fails, open Android Studio Device Manager and use **Wipe Data**.
-
-### Android cannot call backend
-
-Use this URL in `src/api/endpoints.ts`:
-
-```ts
-const BASE_URL = 'http://10.0.2.2:8082/api/v1';
-```
-
-### Metro port issue
-
-If port `8081` is stuck, stop old Node/Metro processes and run:
-
-```bash
-npm start -- --reset-cache
-```
-
 ### Native build cache issue
-
-Clean Android:
 
 ```bash
 cd android
@@ -235,9 +214,18 @@ cd ..
 npm run android
 ```
 
+### Android install says insufficient storage
+
+```bash
+adb uninstall com.vitaltrack.ai
+adb shell pm trim-caches 1G
+```
+
+If needed, wipe the emulator from Android Studio Device Manager.
+
 ## Notes
 
 - Do not use Expo Go.
 - Do not run `expo start`.
 - Keep Metro running while using the app.
-- For Android emulator, always use `10.0.2.2` for your local backend.
+- For Android emulator, use `10.0.2.2` for a backend running on your machine.

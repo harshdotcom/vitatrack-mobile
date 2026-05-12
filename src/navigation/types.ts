@@ -7,6 +7,7 @@ export type RootStackParamList = {
   ResetPassword: { email?: string };
   MainTabs: undefined;
   DocumentDetails: { id: string };
+  AIAnalysis: { documentId: string; fileId?: string; documentName?: string };
 };
 
 export type MainTabParamList = {

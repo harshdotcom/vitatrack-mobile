@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from 'react';
-import { View, TextInput, StyleSheet, ViewStyle } from 'react-native';
+import { View, TextInput, StyleSheet, ViewStyle, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { borderRadius } from '../../theme/spacing';
 
@@ -17,11 +17,21 @@ interface OtpInputProps {
  */
 export function OtpInput({ length = 6, value, onChange, style, disabled }: OtpInputProps) {
   const { colors, fontFamily, fontSize } = useAppTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const inputs = useRef<Array<TextInput | null>>([]);
+  const gap = 8;
+  const estimatedHorizontalChrome = 88;
+  const boxWidth = Math.max(
+    32,
+    Math.min(48, Math.floor((windowWidth - estimatedHorizontalChrome - gap * (length - 1)) / length)),
+  );
+  const boxHeight = Math.max(50, boxWidth + 14);
 
   const chars = value.split('');
   // Pad to length
-  while (chars.length < length) chars.push('');
+  while (chars.length < length) {
+    chars.push('');
+  }
 
   const handleChange = useCallback(
     (text: string, index: number) => {
@@ -73,6 +83,8 @@ export function OtpInput({ length = 6, value, onChange, style, disabled }: OtpIn
                 color: colors.textMain,
                 borderColor: isFilled ? colors.primary : colors.border,
                 backgroundColor: isFilled ? colors.inputFocusBg : colors.inputBg,
+                width: boxWidth,
+                height: boxHeight,
               },
             ]}
             value={chars[i]}
@@ -94,12 +106,11 @@ export function OtpInput({ length = 6, value, onChange, style, disabled }: OtpIn
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    gap: 8,
   },
   box: {
-    width: 48,
-    height: 58,
     borderWidth: 1.5,
     borderRadius: borderRadius.md,
     textAlign: 'center',

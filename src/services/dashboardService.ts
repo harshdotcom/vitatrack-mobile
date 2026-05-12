@@ -24,6 +24,19 @@ export const dashboardService = {
     return data;
   },
 
+  getTimelineDocuments: async (cursor = '', limit = 12): Promise<unknown> => {
+    const params: Record<string, string | number> = { limit };
+
+    if (cursor) {
+      params.cursor = cursor;
+    }
+
+    const { data } = await api.get<unknown>(ENDPOINTS.DOCUMENTS_INFINITE_SCROLL, {
+      params,
+    });
+    return data;
+  },
+
   uploadFile: async (
     asset: UploadAsset,
     fileType = 'lab_report',
